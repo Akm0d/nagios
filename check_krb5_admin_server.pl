@@ -49,7 +49,7 @@ $server         ||= "kerbmaster";
 
 my $address = "";
 my $error = "";
-if ( $server =~ /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]/ ){
+if ( $server =~ /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/ ){
         $address = $server;
 } else {
         $address = "$server.$domain";
