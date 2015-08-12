@@ -18,16 +18,18 @@ my $help_text =
         -?,--help
         -d,--domain domain.name.com   {default is the current host's domain}
         -k,--keytab /path/to/keytab   {default is /etc/krb5.keytab}
+        -o,--port [port_number]       {default is 749}
         -p,--principal principal_name {default is host/[current hostname].domain}
         -r,--realm REALM.NAME         {default is the current host's domain ALL CAPS}
         -s,--server name_or_ip        {defualt is kerbmaster}
         -v,--verbose\n";
 
 #Handle command line options
-my ( $help,$domain,$keytab,$principal,$realm,$server,$verbose ) = "";
+my ( $help,$domain,$keytab,$port,$principal,$realm,$server,$verbose ) = "";
 GetOptions (    'help|?'                => \$help,
                 'd|domain=s{1}'         => \$domain,
                 'k|keytab=s{1}'         => \$keytab,
+                'o|port=s{1}'           => \$port,
                 'p|principal=s{1}'      => \$principal,
                 'r|realm=s{1}'          => \$realm,
                 's|server=s{1}'         => \$server,
@@ -44,6 +46,7 @@ my $user = getpwuid( $< );
 chomp(my $hostname= `hostname`);
 chomp($domain   ||= `hostname -d`);
 $keytab         ||= "/etc/krb5.keytab";
+$port           ||= "749";
 $principal      ||= "host/$hostname.$domain";
 $realm          ||= uc$domain;
 $server         ||= "kerbmaster";
@@ -62,10 +65,11 @@ if ($verbose){
         print "hostname:  $hostname\n"
              ."domain:    $domain\n"
              ."keytab:    $keytab\n"
+             ."port:      $port\n"
              ."principal: $principal\n"
              ."realm:     $realm\n"
              ."server:    $server\n\n";
-        `kadmin -kt $keytab -p $principal -r $realm -s $address -q \"q\"`;
+        `kadmin -kt $keytab -p $principal -r $realm -s $address:$port -q \"q\"`;
         exit (3);
 } else {
         #Check Kadmin with Nagios
@@ -83,7 +87,7 @@ if ($verbose){
                         };
                 #Timeout after 5 seconds
                 alarm 5;
-                `kadmin -kt $keytab -p $principal -r $realm -s $address -q \"q\" > /dev/null 2> $file`;
+                `kadmin -kt $keytab -p $principal -r $realm -s $address:$port -q \"q\" > /dev/null 2> $file`;
                 alarm 0;
         };
 
