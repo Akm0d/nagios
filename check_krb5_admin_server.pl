@@ -40,6 +40,7 @@ if ($help) {
 }
 
 #Set defaults
+my $user = getpwuid( $< );
 chomp(my $hostname= `hostname`);
 chomp($domain   ||= `hostname -d`);
 $keytab         ||= "/etc/krb5.keytab";
@@ -49,6 +50,7 @@ $server         ||= "kerbmaster";
 
 my $address = "";
 my $error = "";
+my $file = "";
 if ( $server =~ /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/ ){
         $address = $server;
 } else {
@@ -67,10 +69,23 @@ if ($verbose){
         exit (3);
 } else {
         #Check Kadmin with Nagios
-        my $file = "/tmp/check_admin_server.tmp";
+        if ($user eq "root"){
+                $file = "/$user/check_admin_server.tmp";
+        } else {
+                $file = "/home/$user/check_admin_server.tmp";
+        }
         system" touch $file";
 
-        `kadmin -kt $keytab -p $principal -r $realm -s $address -q \"q\" > /dev/null 2> $file`;
+        eval {
+                local $SIG{ALRM} = sub {
+                                print "Timeout while connecting to $server\n";
+                                exit(2);
+                        };
+                #Timeout after 5 seconds
+                alarm 5;
+                `kadmin -kt $keytab -p $principal -r $realm -s $address -q \"q\" > /dev/null 2> $file`;
+                alarm 0;
+        };
 
         #Filter the output
         open(my $input, "<", $file) or die $!;
@@ -87,8 +102,20 @@ if ($verbose){
         } elsif ($error =~ /failure/){
                 print "$error\n";
                 exit (1);#Critical
+        } elsif ($error =~ /Permission denied/){
+                print "$user doesn't have access to $keytab\n";
+                print "recomended action, run:\n";
+                print "# chmod 460 /etc/krb5.keytab\n";
+                print "# chown $user $keytab\n";
+                exit (2);#Warning
         } elsif ($error =~ /Bad/){
                 print "$error\n";
+                exit (2);#Warning
+        } elsif ($error =~ /Unsupported/){
+                print "Incorrect version number for $principal in $keytab\n";
+                exit (2);#Warning
+        } elsif ($error =~ /No such/){
+                print "$keytab does not exist\n";
                 exit (2);#Warning
         } elsif ($error =~ /Missing/){
                 print "$error\n";
