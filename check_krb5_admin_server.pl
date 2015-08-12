@@ -6,6 +6,8 @@
 # Description:
 #       This script determines whether
 #       the kerbmaster is functioning
+# Reference: http://web.mit.edu/kerberos/krb5-1.12/doc/admin/admin_commands/kadmin_local.html
+
 use strict;
 use warnings;
 use Getopt::Long qw(:config ignore_case);
