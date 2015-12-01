@@ -4,7 +4,6 @@
 # Date:    November 30, 2015
 # Usage: ./check_salt.pl
 # Description: This script will parse the /srv/salt/salt-master-nagios.txt file 
-# Make sure that the directory exists before running this script
 
 use strict;
 use warnings;
@@ -18,22 +17,15 @@ my $help_text =
 "usage:  ./check_salt.pl [options]\n
 [options] are any of the following:
         -?,--help
+        -f,--file file_path
+        -l,--limit minutes_between_checks
         -v,--verbose\n";
 
-# Error message
-my $Requires = "\nCRITICAL: Cannot find the file \"/srv/salt/scripts/salt-master-nagios.txt\"\n
-There should be a 15-minutely on the salt master that does the following:
-#!/bin/bash
-START_TIME=\$SECONDS # Get the seconds from the current date
-date > /srv/salt/scripts/salt-master-nagios.txt; # get the current date and clear output file
-salt \* test.ping >> /srv/salt/scripts/salt-master-nagios.txt; # ping all minions
-ELAPSED_TIME=$((\$SECONDS - \$START_TIME)); # get elapsed time
-echo \$ELAPSED_TIME >> /srv/salt/scripts/salt-master-nagios.txt; # append the elapsed time to output
-scp /srv/salt/scripts/salt-master-nagios.txt nagios:/srv/salt/ > /dev/null; # send data to nagios\n\n";
-
 #Handle command line options
-my ( $help,$verbose ) = "";
+my ( $help,$file,$limit,$verbose ) = "";
 GetOptions (    'help|?'                => \$help,
+                'f|file=s{1}'           => \$file,
+                'l|limit=s{1}'          => \$limit,
                 'v|verbose'             => \$verbose
 )
 or die $help_text;
@@ -44,7 +36,19 @@ if ($help) {
 }
 
 # This is the file to be parsed
-my $file = "/srv/salt/salt-master-nagios.txt";
+$file ||= "/srv/salt/output_file.txt;";
+
+# Error message for opening a file
+my $Requires = "\nCRITICAL: Cannot find the file \"$file\"\n
+There should be a 15-minutely on the salt master that does the following:
+#!/bin/bash
+START_TIME=\$SECONDS # Get the seconds from the current date
+date > /srv/salt/output_file.txt; # get the current date and clear output file
+salt \* test.ping >> /srv/salt/output_file.txt; # ping all minions
+ELAPSED_TIME=$((\$SECONDS - \$START_TIME)); # get elapsed time
+echo \$ELAPSED_TIME >> /srv/salt/output_file.txt; # append the elapsed time to output
+scp /srv/salt/output_file.txt; # send data to nagios\n\n";
+
 # Open the file
 open(FILE,"< $file") or die $Requires;
 # Store the file in an array called @lines
@@ -60,13 +64,16 @@ chomp(my $latency = pop @lines);
 # Get the current date and time
 chomp(my $date = `date +"%H:%M:%S"`);
 
-my $limit = 20; # the number of minutes between checks
+$limit ||= 20; # the number of minutes between checks
 # Find the difference in seconds between the two dates
 my $date_diff = str2time($date) - str2time($file_date);
 if ($date_diff > ($limit * 60)){ # Turn the limit in minutes to seconds
         my @seconds = gmtime($date_diff); # Convert seconds to human readable time
-        printf("UNKNOWN: The master hasn't sent new data in %2d days %2d hours %2d minutes  and %2d seconds\n"
+        if ($verbose){
+                 printf(
+                "UNKNOWN: The master hasn't sent new data in %2d days %2d hours %2d minutes  and %2d seconds\n"
                 ,@seconds[7,2,1,0]); # print out a human readable statement
+        }
         exit 3;
 }
 
@@ -79,7 +86,9 @@ while (scalar(@lines) > 0){
         # If the first item
         if ($minion =~ "The master is not responding" && $first_pass){
                 # Exit with a critical status and report latency
-                print "CRITICAL: Master didn't respond after $latency seconds\n";
+                if ($verbose){
+                        print "CRITICAL: Master didn't respond after $latency seconds\n";
+                }
                 exit 2;
         }
         chomp(my $reachable = shift(@lines)); # the second item is True/False
@@ -103,10 +112,14 @@ if ($plural){
 }
 
 if ($unreachable){
-        print "WARNING: $unreachable $plural disconnected or unreachable after $latency seconds\n";
+        if ($verbose){
+                print "WARNING: $unreachable $plural disconnected or unreachable after $latency seconds\n";
+        }
         # Release a warning message with a list of unreachable minions
         exit 1;
 } else {
-        print "OK: All minions were reached within $latency seconds\n";
+        if ($verbose){
+                print "OK: All minions were reached within $latency seconds\n";
+        }
         exit 0;
 }
